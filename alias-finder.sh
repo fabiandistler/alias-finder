@@ -230,13 +230,13 @@ alias-finder() {
     # For subsequent iterations or with longer flag, allow text after command
     if [[ "$is_first_iteration" == true ]] && [[ "$exact" == true ]]; then
       # Exact mode: match the exact command with optional quotes at start/end
-      finder="'{0,1}${cmd}'{0,1}\$"
+      finder="'?${cmd}'?\$"
     elif [[ "$longer" == true ]]; then
       # Longer mode: match command anywhere (allows longer aliases)
       finder="${cmd}"
     else
       # Default: match command at start, allow more text after (partial matching)
-      finder="'{0,1}${cmd}"
+      finder="'?${cmd}"
     fi
     is_first_iteration=false
 
@@ -245,7 +245,7 @@ alias-finder() {
       local cmd_len=${#cmd}
       # Don't search for aliases if command is too short
       [[ $cmd_len -le 1 ]] && break
-      filter="^'\\?.\\{1,$((cmd_len - 1))\\}'\\?="
+      filter="^'?.{1,$((cmd_len - 1))}'?="
     fi
 
     # Perform the search

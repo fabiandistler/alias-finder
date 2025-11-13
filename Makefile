@@ -24,7 +24,7 @@ help: ## Show this help message
 
 test: ## Run the test suite
 	@printf "$(BLUE)Running tests...$(NC)\n"
-	@bash test.sh
+	@env -u ALIAS_FINDER_AUTOMATIC -u ALIAS_FINDER_CHEAPER -u ALIAS_FINDER_EXACT -u ALIAS_FINDER_LONGER bash test.sh
 
 lint: ## Run shellcheck on the script (if available)
 	@printf "$(BLUE)Running shellcheck...$(NC)\n"
