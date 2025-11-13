@@ -282,8 +282,83 @@ alias-finder-preexec() {
   # Skip empty commands
   [[ -z "${1:-}" ]] && return 0
 
-  # Run alias-finder and suppress its return code
-  alias-finder "$1" 2>/dev/null || true
+  local cmd="$1"
+
+  # Normalize the command first
+  cmd=$(_alias_finder_normalize_cmd "$cmd")
+  local original_cmd="$cmd"
+
+  # For automatic mode, we want exact matches or close matches only
+  # Try exact match first
+  local results
+  local escaped_cmd
+  escaped_cmd=$(_alias_finder_escape_regex "$cmd")
+  local finder="'?${escaped_cmd}'?\$"
+  results=$(_alias_finder_search "" "$finder" 2>/dev/null)
+
+  # If no exact match, try matching at the start (allowing more text after)
+  if [[ -z "$results" ]]; then
+    finder="'?${escaped_cmd}"
+    results=$(_alias_finder_search "" "$finder" 2>/dev/null)
+  fi
+
+  # If still no match, try removing arguments from the end (max 8 iterations)
+  # This handles cases like "git commit -m 'msg'" matching "gc='git commit'"
+  if [[ -z "$results" ]]; then
+    local iteration=0
+    local search_cmd="$cmd"  # Work with the normalized (not escaped) version
+    while [[ -z "$results" ]] && [[ $iteration -lt 8 ]]; do
+      # Remove the last word from the normalized command
+      search_cmd=$(printf '%s' "$search_cmd" | sed -E 's/[[:space:]]+[^[:space:]]+$//')
+      [[ -z "$search_cmd" ]] && break
+
+      # Now escape it for regex matching
+      local escaped_search
+      escaped_search=$(_alias_finder_escape_regex "$search_cmd")
+
+      # Try both exact match and prefix match
+      finder="'?${escaped_search}'?\$"
+      results=$(_alias_finder_search "" "$finder" 2>/dev/null)
+
+      # If no exact match, try prefix match (alias value starts with this)
+      if [[ -z "$results" ]]; then
+        finder="'?${escaped_search}"
+        results=$(_alias_finder_search "" "$finder" 2>/dev/null)
+      fi
+
+      iteration=$((iteration + 1))
+    done
+  fi
+
+  # If we have results, format them nicely for automatic suggestions
+  if [[ -n "$results" ]]; then
+    # Deduplicate and sort by alias name length (shorter is better)
+    local formatted_results
+    formatted_results=$(printf '%s\n' "$results" | sort -u | \
+      awk -F= '{print length($1) " " $0}' | sort -n | cut -d' ' -f2-)
+
+    # Show a user-friendly message with the best (shortest) alias
+    local best_alias
+    best_alias=$(printf '%s\n' "$formatted_results" | head -n1)
+
+    if [[ -n "$best_alias" ]]; then
+      # Extract just the alias name (before the =)
+      local alias_name
+      alias_name=$(printf '%s' "$best_alias" | cut -d= -f1 | tr -d "'")
+
+      printf '\033[2m💡 Alias available: \033[0m\033[1m%s\033[0m\n' "$alias_name"
+
+      # Optionally show other aliases if there are multiple matches
+      local total_count
+      total_count=$(printf '%s\n' "$formatted_results" | wc -l)
+      if [[ $total_count -gt 1 ]]; then
+        printf '\033[2m   (%d more aliases available - run "alias-finder %s" to see all)\033[0m\n' \
+          $((total_count - 1)) "$1"
+      fi
+    fi
+  fi
+
+  return 0
 }
 
 #######################################
