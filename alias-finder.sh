@@ -270,6 +270,7 @@ alias-finder() {
 # Requires bash-preexec library
 # Globals:
 #   ALIAS_FINDER_AUTOMATIC
+#   ALIAS_FINDER_CHEAPER
 # Arguments:
 #   $1 - Command about to be executed
 # Outputs:
@@ -287,6 +288,7 @@ alias-finder-preexec() {
   # Normalize the command first
   cmd=$(_alias_finder_normalize_cmd "$cmd")
   local original_cmd="$cmd"
+  local original_cmd_len=${#original_cmd}
 
   # For automatic mode, we want exact matches or close matches only
   # Try exact match first
@@ -332,28 +334,74 @@ alias-finder-preexec() {
 
   # If we have results, format them nicely for automatic suggestions
   if [[ -n "$results" ]]; then
-    # Deduplicate and sort by alias name length (shorter is better)
-    local formatted_results
-    formatted_results=$(printf '%s\n' "$results" | sort -u | \
-      awk -F= '{print length($1) " " $0}' | sort -n | cut -d' ' -f2-)
+    # Filter results to ensure alias values are relevant to the original command
+    # For each alias, extract its value and check if it matches the original command
+    local filtered_results=""
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
 
-    # Show a user-friendly message with the best (shortest) alias
-    local best_alias
-    best_alias=$(printf '%s\n' "$formatted_results" | head -n1)
+      # Extract alias value (everything after the first '=', removing quotes)
+      local alias_value
+      alias_value=$(printf '%s' "$line" | sed -E "s/^[^=]+=//; s/^'//; s/'\$//")
 
-    if [[ -n "$best_alias" ]]; then
-      # Extract just the alias name (before the =)
-      local alias_name
-      alias_name=$(printf '%s' "$best_alias" | cut -d= -f1 | tr -d "'")
+      # Check if the original command starts with this alias value
+      # This prevents showing "gs='git status'" when user typed "git add"
+      local escaped_alias_value
+      escaped_alias_value=$(_alias_finder_escape_regex "$alias_value")
+      if printf '%s' "$original_cmd" | grep -qE "^${escaped_alias_value}"; then
+        filtered_results="${filtered_results}${line}"$'\n'
+      fi
+    done <<< "$results"
 
-      printf '\033[2m💡 Alias available: \033[0m\033[1m%s\033[0m\n' "$alias_name"
+    results="$filtered_results"
 
-      # Optionally show other aliases if there are multiple matches
-      local total_count
-      total_count=$(printf '%s\n' "$formatted_results" | wc -l)
-      if [[ $total_count -gt 1 ]]; then
-        printf '\033[2m   (%d more aliases available - run "alias-finder %s" to see all)\033[0m\n' \
-          $((total_count - 1)) "$1"
+    # Apply cheaper filter if enabled (only show aliases shorter than the command)
+    if [[ "${ALIAS_FINDER_CHEAPER:-false}" == "true" ]] && [[ -n "$results" ]]; then
+      local length_filtered=""
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+
+        # Extract alias name (before the =, removing 'alias ' prefix and quotes)
+        local alias_name
+        alias_name=$(printf '%s' "$line" | sed -E 's/^alias //; s/=.*//' | tr -d "'")
+        local alias_name_len=${#alias_name}
+
+        # Only include if alias is strictly shorter than the command
+        if [[ $alias_name_len -lt $original_cmd_len ]]; then
+          length_filtered="${length_filtered}${line}"$'\n'
+        fi
+      done <<< "$results"
+
+      results="$length_filtered"
+    fi
+
+    # Remove trailing newline and check if we still have results
+    results=$(printf '%s' "$results" | sed '/^$/d')
+
+    if [[ -n "$results" ]]; then
+      # Deduplicate and sort by alias name length (shorter is better)
+      local formatted_results
+      formatted_results=$(printf '%s\n' "$results" | sort -u | \
+        awk -F= '{print length($1) " " $0}' | sort -n | cut -d' ' -f2-)
+
+      # Show a user-friendly message with the best (shortest) alias
+      local best_alias
+      best_alias=$(printf '%s\n' "$formatted_results" | head -n1)
+
+      if [[ -n "$best_alias" ]]; then
+        # Extract just the alias name (before the =, removing 'alias ' prefix)
+        local alias_name
+        alias_name=$(printf '%s' "$best_alias" | sed -E 's/^alias //; s/=.*//' | tr -d "'")
+
+        printf '\033[2m💡 Alias available: \033[0m\033[1m%s\033[0m\n' "$alias_name"
+
+        # Optionally show other aliases if there are multiple matches
+        local total_count
+        total_count=$(printf '%s\n' "$formatted_results" | wc -l)
+        if [[ $total_count -gt 1 ]]; then
+          printf '\033[2m   (%d more aliases available - run "alias-finder %s" to see all)\033[0m\n' \
+            $((total_count - 1)) "$1"
+        fi
       fi
     fi
   fi
