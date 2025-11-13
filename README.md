@@ -121,7 +121,7 @@ curl https://raw.githubusercontent.com/rcaloras/bash-preexec/master/bash-preexec
 2. Add to your `.bashrc`:
 ```bash
 # Load bash-preexec first
-source ~/.bash-preexec.sh
+source ~/.bash-preexec.sh # Has to be at the end of your config file to work
 
 # Enable automatic suggestions
 export ALIAS_FINDER_AUTOMATIC=true
