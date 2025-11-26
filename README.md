@@ -118,15 +118,15 @@ For automatic alias suggestions before each command, you need to install [bash-p
 curl https://raw.githubusercontent.com/rcaloras/bash-preexec/master/bash-preexec.sh -o ~/.bash-preexec.sh
 ```
 
-2. Add to your `.bashrc`:
+2. Add to your `.bashrc` (preferably near the end of the file):
 ```bash
-# Load bash-preexec first
-source ~/.bash-preexec.sh # Has to be at the end of your config file to work
+# Load bash-preexec first (must be loaded before alias-finder)
+source ~/.bash-preexec.sh
 
 # Enable automatic suggestions
 export ALIAS_FINDER_AUTOMATIC=true
 
-# Load alias-finder
+# Load alias-finder (must be loaded after bash-preexec)
 source ~/.local/bin/alias-finder
 ```
 
