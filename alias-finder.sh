@@ -245,7 +245,7 @@ alias-finder() {
       local cmd_len=${#cmd}
       # Don't search for aliases if command is too short
       [[ $cmd_len -le 1 ]] && break
-      filter="^'?.{1,$((cmd_len - 1))}'?="
+      filter="^alias '?.{1,$((cmd_len - 1))}'?="
     fi
 
     # Perform the search
